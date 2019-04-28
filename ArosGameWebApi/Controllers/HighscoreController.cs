@@ -1,10 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Table;
 using Microsoft.Extensions.Configuration;
+using ArosGameWebApi.Models;
 
 namespace ArosGameWebApi.Controllers
 {
@@ -22,20 +22,15 @@ namespace ArosGameWebApi.Controllers
             configuration = config;
         }
 
-        // GET api/values
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Person>>> GetAsync()
+        public ActionResult<IEnumerable<Person>> Get()
         {
             var list = new List<Person>();
-            var storageAccount = CloudStorageAccount.Parse(configuration.GetConnectionString("StorageConnectionString"));
-            var tableClient = storageAccount.CreateCloudTableClient();
-            var table = tableClient.GetTableReference("Highscores");
-            _ = table.CreateIfNotExistsAsync().Result;
             var query = new TableQuery<HighScoreEntity>();
             TableContinuationToken token = null;
             do
             {
-                var resultSegment = await table.ExecuteQuerySegmentedAsync(query, token);
+                var resultSegment = GetHighscoreTable().ExecuteQuerySegmentedAsync(query, token).Result;
                 token = resultSegment.ContinuationToken;
                 foreach(var entity in resultSegment.Results)
                 {
@@ -50,49 +45,20 @@ namespace ArosGameWebApi.Controllers
             return list;
         }
 
-        // POST api/values
         [HttpPost]
-        public void Post([FromBody] PostData postData)
+        public void Post([FromBody] Person person)
+        {
+            var insertoperation = TableOperation.Insert(new HighScoreEntity(person.Highscore.ToString(), person.Name));
+            GetHighscoreTable().ExecuteAsync(insertoperation);
+        }
+
+        private CloudTable GetHighscoreTable()
         {
             var storageAccount = CloudStorageAccount.Parse(configuration.GetConnectionString("StorageConnectionString"));
             var tableClient = storageAccount.CreateCloudTableClient();
             var table = tableClient.GetTableReference("Highscores");
             _ = table.CreateIfNotExistsAsync().Result;
-            var insertoperation = TableOperation.Insert(new HighScoreEntity(postData.Highscore.ToString(), postData.Name));
-            table.ExecuteAsync(insertoperation);
-        }
-
-        //private string GetStorageKey()
-        //{
-        //    var azureServiceTokenProvider = new AzureServiceTokenProvider();
-        //    var kv = new KeyVaultClient(new KeyVaultClient.AuthenticationCallback(azureServiceTokenProvider.KeyVaultTokenCallback));
-        //    var key = kv.GetSecretAsync("https://arosgamekeyvault.vault.azure.net/secrets/StorageKey/dca0e168d32d4ab18e955da0c5f34a3d").Result;
-        //    return key.Value;
-        //}
-
-        public class PostData
-        {
-            public string Name { get; set; }
-            public int Highscore { get; set; }
-        }
-
-        public class HighScoreEntity : TableEntity
-        {
-            public HighScoreEntity()
-            {
-
-            }
-            public HighScoreEntity(string highscore, string name)
-            {
-                PartitionKey = name;
-                RowKey = highscore;
-            }
-        }
-
-        public class Person
-        {
-            public string Name { get; set; }
-            public int Highscore { get; set; }
+            return table;
         }
     }
 }
